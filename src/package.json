@@ -1,0 +1,27 @@
+{
+  "name": "teacher-workload-app",
+  "version": "1.0.0",
+  "description": "教师工作量计算系统",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . '教师工作量计算系统' --platform=win32 --arch=x64 --out=dist --overwrite"
+  },
+  "build": {
+    "appId": "com.teacher.workload.app",
+    "productName": "教师工作量计算系统",
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "files": [
+      "index.html",
+      "styles.css",
+      "script.js",
+      "main.js"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-packager": "^17.1.2"
+  }
+}
