@@ -1,11 +1,284 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>PakePlus</title>
-    </head>
-    <body>
-        Hello World
-    </body>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师工作量计算系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>教师工作量计算系统</h1>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="teachers">教师管理</button>
+            <button class="tab-btn" data-tab="subjects">学科系数</button>
+            <button class="tab-btn" data-tab="statistics">统计报表</button>
+        </div>
+
+        <div class="tab-content" id="teachers">
+            <div class="section">
+                <h2>教师信息管理</h2>
+                
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="showAddTeacherModal()">添加教师</button>
+                    <button class="btn btn-success" onclick="document.getElementById('importExcel').click()">导入Excel</button>
+                    <button class="btn btn-warning" onclick="showFormatStandardizationModal()">格式标准化</button>
+                    <button class="btn btn-info" onclick="exportToExcel()">导出Excel</button>
+                    <button class="btn btn-danger" onclick="deleteAllTeachers()">全部删除</button>
+                    <input type="file" id="importExcel" accept=".xlsx,.xls" style="display: none;" onchange="importFromExcel(event)">
+                </div>
+
+                <div class="filter-section">
+                    <label>学期：</label>
+                    <select id="semesterFilter" onchange="filterTeachers()">
+                        <option value="all">全部学期</option>
+                        <option value="2024-2025-1">2024-2025学年第一学期</option>
+                        <option value="2024-2025-2">2024-2025学年第二学期</option>
+                        <option value="2025-2026-1">2025-2026学年第一学期</option>
+                        <option value="2025-2026-2">2025-2026学年第二学期</option>
+                    </select>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>教师姓名</th>
+                            <th>学期</th>
+                            <th>年级</th>
+                            <th>班级</th>
+                            <th>学科</th>
+                            <th>节数</th>
+                            <th>学科系数</th>
+                            <th>课时量</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teachersTableBody">
+                    </tbody>
+                </table>
+
+                <div class="summary">
+                    <p>总教师数：<span id="totalTeachers">0</span></p>
+                    <p>总课时量：<span id="totalWorkload">0</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="subjects">
+            <div class="section">
+                <h2>学科系数管理</h2>
+                
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="showAddSubjectModal()">添加学科</button>
+                    <button class="btn btn-warning" onclick="resetSubjectCoefficients()">重置默认系数</button>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>年级</th>
+                            <th>学科名称</th>
+                            <th>学科系数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="subjectsTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-content" id="statistics">
+            <div class="section">
+                <h2>统计报表</h2>
+                
+                <div class="filter-section">
+                    <label>学年：</label>
+                    <select id="yearFilter" onchange="updateStatistics()">
+                        <option value="2024-2025">2024-2025学年</option>
+                        <option value="2025-2026">2025-2026学年</option>
+                    </select>
+                    <label style="margin-left: 20px;">年级：</label>
+                    <select id="gradeFilter" onchange="updateStatistics()">
+                        <option value="all">全部年级</option>
+                    </select>
+                    <label style="margin-left: 20px;">班级：</label>
+                    <select id="classFilter" onchange="updateStatistics()">
+                        <option value="all">全部班级</option>
+                    </select>
+                </div>
+
+                <div class="statistics-grid">
+                    <div class="stat-card">
+                        <h3>学期统计</h3>
+                        <div id="semesterStats"></div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>教师工作量排名</h3>
+                        <div id="teacherRanking"></div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>学科统计</h3>
+                        <div id="subjectStats"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="addTeacherModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('addTeacherModal')">&times;</span>
+            <h2>添加教师信息</h2>
+            <form id="addTeacherForm" onsubmit="addTeacher(event)">
+                <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="teacherName">教师姓名：</label>
+                        <input type="text" id="teacherName" required>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="semester">学期：</label>
+                        <select id="semester" required>
+                            <option value="2024-2025-1">2024-2025学年第一学期</option>
+                            <option value="2024-2025-2">2024-2025学年第二学期</option>
+                            <option value="2025-2026-1">2025-2026学年第一学期</option>
+                            <option value="2025-2026-2">2025-2026学年第二学期</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="grade">年级：</label>
+                        <input type="text" id="grade" placeholder="例如：高一、高二、初三">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="class">班级：</label>
+                        <input type="text" id="class" placeholder="例如：1班、2班、3班">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="subject">学科：</label>
+                        <select id="subject" required>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="periods">节数：</label>
+                        <input type="number" id="periods" min="0" required>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; text-align: center;">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editTeacherModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editTeacherModal')">&times;</span>
+            <h2>编辑教师信息</h2>
+            <form id="editTeacherForm" onsubmit="updateTeacher(event)">
+                <input type="hidden" id="editTeacherId">
+                <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="editTeacherName">教师姓名：</label>
+                        <input type="text" id="editTeacherName" required>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="editSemester">学期：</label>
+                        <select id="editSemester" required>
+                            <option value="2024-2025-1">2024-2025学年第一学期</option>
+                            <option value="2024-2025-2">2024-2025学年第二学期</option>
+                            <option value="2025-2026-1">2025-2026学年第一学期</option>
+                            <option value="2025-2026-2">2025-2026学年第二学期</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="editGrade">年级：</label>
+                        <input type="text" id="editGrade" placeholder="例如：高一、高二、初三">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="editClass">班级：</label>
+                        <input type="text" id="editClass" placeholder="例如：1班、2班、3班">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="editSubject">学科：</label>
+                        <select id="editSubject" required>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px;">
+                        <label for="editPeriods">节数：</label>
+                        <input type="number" id="editPeriods" min="0" required>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; text-align: center;">
+                    <button type="submit" class="btn btn-primary">更新</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="addSubjectModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('addSubjectModal')">&times;</span>
+            <h2>添加学科</h2>
+            <form id="addSubjectForm" onsubmit="addSubject(event)">
+                <div class="form-group">
+                    <label for="subjectGrade">年级：</label>
+                    <input type="text" id="subjectGrade" placeholder="例如：高一、高二、初三" required>
+                </div>
+                <div class="form-group">
+                    <label for="subjectName">学科名称：</label>
+                    <input type="text" id="subjectName" required>
+                </div>
+                <div class="form-group">
+                    <label for="coefficient">学科系数：</label>
+                    <input type="number" id="coefficient" value="1.00" step="0.01" required>
+                </div>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="editSubjectModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editSubjectModal')">&times;</span>
+            <h2>编辑学科系数</h2>
+            <form id="editSubjectForm" onsubmit="updateSubject(event)">
+                <input type="hidden" id="editSubjectId">
+                <div class="form-group">
+                    <label for="editSubjectGrade">年级：</label>
+                    <input type="text" id="editSubjectGrade" placeholder="例如：高一、高二、初三" required>
+                </div>
+                <div class="form-group">
+                    <label for="editSubjectName">学科名称：</label>
+                    <input type="text" id="editSubjectName" required>
+                </div>
+                <div class="form-group">
+                    <label for="editCoefficient">学科系数：</label>
+                    <input type="number" id="editCoefficient" required>
+                </div>
+                <button type="submit" class="btn btn-primary">更新</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="formatStandardizationModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('formatStandardizationModal')">&times;</span>
+            <h2>格式标准化</h2>
+            <p>上传Excel文件进行格式标准化处理，自动识别年级、班级、学科和节数信息，并直接导入到系统中。</p>
+            
+            <div class="form-group">
+                <label for="standardizeExcel">选择Excel文件：</label>
+                <input type="file" id="standardizeExcel" accept=".xlsx,.xls" onchange="handleStandardizeFile(event)">
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="script.js"></script>
+</body>
 </html>
