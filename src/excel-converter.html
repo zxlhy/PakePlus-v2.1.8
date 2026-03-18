@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel数据转换工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .result h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .result p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+        
+        .success {
+            color: #28a745;
+        }
+        
+        .error {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Excel数据转换工具</h1>
+        
+        <div class="form-group">
+            <label for="excelFile">选择Excel文件：</label>
+            <input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
+        </div>
+        
+        <button class="btn btn-primary" onclick="processExcel()">开始转换</button>
+        
+        <div class="result" id="result"></div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        function processExcel() {
+            const fileInput = document.getElementById('excelFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('请选择一个Excel文件', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    // 处理每个工作表
+                    const results = [];
+                    workbook.SheetNames.forEach(sheetName => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        
+                        // 处理数据
+                        const processedData = processData(jsonData);
+                        results.push({ sheetName, data: processedData });
+                    });
+                    
+                    // 创建新的工作簿
+                    const newWorkbook = XLSX.utils.book_new();
+                    
+                    // 添加处理后的数据到新工作簿
+                    results.forEach(({ sheetName, data }) => {
+                        if (data.length > 0) {
+                            const newWorksheet = XLSX.utils.json_to_sheet(data);
+                            XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, sheetName);
+                        }
+                    });
+                    
+                    // 生成文件名
+                    const originalName = file.name;
+                    const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.'));
+                    const newFileName = `${nameWithoutExt}_标准化.xlsx`;
+                    
+                    // 导出文件
+                    XLSX.writeFile(newWorkbook, newFileName);
+                    
+                    showResult(`转换成功！文件已导出为：${newFileName}`, 'success');
+                } catch (error) {
+                    showResult(`转换失败：${error.message}`, 'error');
+                }
+            };
+            
+            reader.onerror = function() {
+                showResult('文件读取失败', 'error');
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+        
+        function processData(data) {
+            const result = [];
+            
+            data.forEach(row => {
+                // 直接从对应字段提取姓名
+                const name = row['姓名'] || row['教师姓名'] || row['老师姓名'] || row['教师'] || '';
+                if (!name) return; // 跳过无姓名的记录
+                
+                // 分类处理数据
+                const recordType = classifyRecord(row);
+                
+                switch (recordType) {
+                    case 'full_fields':
+                        // 情况1：所有字段都单独存在
+                        processFullFieldsRecord(row, name, result);
+                        break;
+                    case 'mixed_semester':
+                        // 情况2：学期和年级混合在学期字段中
+                        processMixedSemesterRecord(row, name, result);
+                        break;
+                    case 'combined_fields':
+                        // 情况3：多个信息组合在一个字段中
+                        processCombinedFieldsRecord(row, name, result);
+                        break;
+                    default:
+                        // 其他情况：尝试通用处理
+                        processGenericRecord(row, name, result);
+                        break;
+                }
+            });
+            
+            return result.filter(item => item['姓名'] && item['学科']); // 过滤空记录
+        }
+        
+        function classifyRecord(row) {
+            // 分类记录类型
+            const hasName = !!row['姓名'] || !!row['教师姓名'] || !!row['老师姓名'] || !!row['教师'];
+            const hasSemester = !!row['学期'] || !!row['学年学期'] || !!row['学年度'] || !!row['年度学期'];
+            const hasGrade = !!row['年级'] || !!row['年級'];
+            const hasClass = !!row['班级'] || !!row['班級'] || !!row['班'];
+            const hasSubject = !!row['学科'] || !!row['科目'] || !!row['课程'];
+            const hasPeriods = !!row['节数'] || !!row['课时'] || !!row['周课时'] || !!row['课时数'];
+            
+            // 情况1：所有字段都单独存在
+            if (hasName && hasSemester && hasGrade && hasClass && hasSubject && hasPeriods) {
+                return 'full_fields';
+            }
+            
+            // 情况2：学期和年级混合在学期字段中
+            const semesterField = row['学期'] || row['学年学期'] || row['学年度'] || row['年度学期'] || '';
+            const semesterStr = semesterField.toString().trim();
+            if (semesterStr && semesterStr.includes(' ') && !hasGrade) {
+                return 'mixed_semester';
+            }
+            
+            // 情况3：多个信息组合在一个字段中
+            const columns = Object.keys(row);
+            for (let i = 2; i < columns.length; i++) {
+                const columnName = columns[i];
+                const cellValue = row[columnName];
+                const cellValueStr = cellValue.toString().trim();
+                if (cellValueStr && (cellValueStr.includes('班') || cellValueStr.includes('数学') || cellValueStr.includes('语文'))) {
+                    return 'combined_fields';
+                }
+            }
+            
+            // 其他情况
+            return 'generic';
+        }
+        
+        function processFullFieldsRecord(row, name, result) {
+            // 处理所有字段都单独存在的记录
+            const semester = normalizeSemester(row['学期'] || row['学年学期'] || row['学年度'] || row['年度学期'] || '');
+            const grade = row['年级'] || row['年級'] || '';
+            const className = row['班级'] || row['班級'] || row['班'] || '';
+            const subject = row['学科'] || row['科目'] || row['课程'] || '';
+            const periods = row['节数'] || row['课时'] || row['周课时'] || row['课时数'] || 0;
+            
+            if (subject) {
+                result.push({
+                    '姓名': name.trim(),
+                    '学期': semester,
+                    '年级': grade || '',
+                    '班级': className || '',
+                    '学科': subject.trim(),
+                    '节数': parseInt(periods) || 0
+                });
+            }
+        }
+        
+        function processMixedSemesterRecord(row, name, result) {
+            // 处理学期和年级混合在学期字段中的记录
+            const semesterField = row['学期'] || row['学年学期'] || row['学年度'] || row['年度学期'] || '';
+            const semesterStr = semesterField.toString().trim();
+            
+            // 分离学期和年级
+            const semesterParts = semesterStr.split(/\s+/);
+            let semester = '';
+            let grade = '';
+            
+            if (semesterParts.length > 1) {
+                // 第一部分是学期，其余部分可能包含年级
+                semester = normalizeSemester(semesterParts[0]);
+                const gradePart = semesterParts.slice(1).join(' ');
+                grade = extractGrade(gradePart);
+            } else {
+                semester = normalizeSemester(semesterStr);
+            }
+            
+            // 获取其他字段
+            const className = row['班级'] || row['班級'] || row['班'] || '';
+            const subject = row['学科'] || row['科目'] || row['课程'] || '';
+            const periods = row['节数'] || row['课时'] || row['周课时'] || row['课时数'] || 0;
+            
+            if (subject) {
+                result.push({
+                    '姓名': name.trim(),
+                    '学期': semester,
+                    '年级': grade || '',
+                    '班级': className || '',
+                    '学科': subject.trim(),
+                    '节数': parseInt(periods) || 0
+                });
+            }
+        }
+        
+        function processCombinedFieldsRecord(row, name, result) {
+            // 处理多个信息组合在一个字段中的记录
+            const semester = normalizeSemester(row['学期'] || row['学年学期'] || row['学年度'] || row['年度学期'] || '');
+            
+            // 获取所有列名
+            const columns = Object.keys(row);
+            
+            // 处理第三列及以后的所有列
+            for (let i = 2; i < columns.length; i++) {
+                const columnName = columns[i];
+                // 跳过已经处理过的字段
+                if (['年级', '年級', '班级', '班級', '班', '学科', '科目', '课程', '节数', '课时', '周课时', '课时数'].includes(columnName)) {
+                    continue;
+                }
+                
+                const cellValue = row[columnName];
+                const cellValueStr = cellValue.toString().trim();
+                
+                if (!cellValueStr) continue;
+                
+                // 处理多学科情况
+                const subjects = extractMultipleSubjects(cellValueStr);
+                
+                if (subjects.length > 0) {
+                    // 为每个学科创建一条记录
+                    subjects.forEach(subjectInfo => {
+                        result.push({
+                            '姓名': name.trim(),
+                            '学期': semester,
+                            '年级': subjectInfo.grade || '',
+                            '班级': subjectInfo.class || '',
+                            '学科': subjectInfo.subject || '',
+                            '节数': parseInt(subjectInfo.periods) || 0
+                        });
+                    });
+                } else {
+                    // 单学科情况
+                    const grade = extractGrade(cellValueStr);
+                    const className = extractClass(cellValueStr);
+                    const subject = extractSubject(cellValueStr);
+                    const periods = extractPeriods(cellValueStr);
+                    
+                    if (subject) {
+                        result.push({
+                            '姓名': name.trim(),
+                            '学期': semester,
+                            '年级': grade || '',
+                            '班级': className || '',
+                            '学科': subject.trim(),
+                            '节数': parseInt(periods) || 0
+                        });
+                    }
+                }
+            }
+        }
+        
+        function processGenericRecord(row, name, result) {
+            // 通用处理逻辑
+            const semester = normalizeSemester(row['学期'] || row['学年学期'] || row['学年度'] || row['年度学期'] || '');
+            const grade = row['年级'] || row['年級'] || '';
+            const className = row['班级'] || row['班級'] || row['班'] || '';
+            const subject = row['学科'] || row['科目'] || row['课程'] || '';
+            const periods = row['节数'] || row['课时'] || row['周课时'] || row['课时数'] || 0;
+            
+            // 尝试从其他字段提取信息
+            if (!grade || !className || !subject) {
+                const columns = Object.keys(row);
+                for (let i = 2; i < columns.length; i++) {
+                    const columnName = columns[i];
+                    const cellValue = row[columnName];
+                    const cellValueStr = cellValue.toString().trim();
+                    
+                    if (!cellValueStr) continue;
+                    
+                    if (!grade) {
+                        const extractedGrade = extractGrade(cellValueStr);
+                        if (extractedGrade) grade = extractedGrade;
+                    }
+                    
+                    if (!className) {
+                        const extractedClass = extractClass(cellValueStr);
+                        if (extractedClass) className = extractedClass;
+                    }
+                    
+                    if (!subject) {
+                        const extractedSubject = extractSubject(cellValueStr);
+                        if (extractedSubject) subject = extractedSubject;
+                    }
+                    
+                    if (!periods) {
+                        const extractedPeriods = extractPeriods(cellValueStr);
+                        if (extractedPeriods) periods = extractedPeriods;
+                    }
+                }
+            }
+            
+            if (subject) {
+                result.push({
+                    '姓名': name.trim(),
+                    '学期': semester,
+                    '年级': grade || '',
+                    '班级': className || '',
+                    '学科': subject.trim(),
+                    '节数': parseInt(periods) || 0
+                });
+            }
+        }
+        
+        function extractGrade(text) {
+            // 提取年级信息，识别到"级"就把"级"和"级"前面的所有内容截取出来
+            const gradeIndex = text.indexOf('级');
+            if (gradeIndex > 0) {
+                // 向前查找年级的开始位置
+                let startIndex = gradeIndex - 1;
+                while (startIndex >= 0) {
+                    const char = text[startIndex];
+                    if (!/[\u4e00-\u9fa5\d]/.test(char)) {
+                        // 遇到非中文字符或数字时，如果是空格，继续往前查找
+                        if (char === ' ') {
+                            startIndex--;
+                            continue;
+                        }
+                        break;
+                    }
+                    startIndex--;
+                }
+                startIndex++;
+                return text.substring(startIndex, gradeIndex + 1);
+            }
+            return '';
+        }
+        
+        function extractMultipleSubjects(text) {
+            const subjects = [];
+            const subjectList = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '体育', '音乐', '美术', '信息技术'];
+            
+            // 分割多个学科
+            const parts = text.split(/[,，;；]/);
+            
+            parts.forEach(part => {
+                const partTrimmed = part.trim();
+                if (!partTrimmed) return;
+                
+                // 提取学科
+                let subject = '';
+                for (const sub of subjectList) {
+                    if (partTrimmed.includes(sub)) {
+                        subject = sub;
+                        break;
+                    }
+                }
+                
+                if (subject) {
+                    // 提取年级
+                    const grade = extractGrade(partTrimmed);
+                    
+                    // 提取班级
+                    const classMatch = partTrimmed.match(/(\d+班)/);
+                    const className = classMatch ? classMatch[1] : '';
+                    
+                    // 提取节数
+                    const periodsMatch = partTrimmed.match(/(\d+)\s*节|(\d+)\s*课时|(\d+)\s*周课时/);
+                    const periods = periodsMatch ? (periodsMatch[1] || periodsMatch[2] || periodsMatch[3]) : 0;
+                    
+                    subjects.push({
+                        subject: subject,
+                        grade: grade,
+                        class: className,
+                        periods: periods
+                    });
+                }
+            });
+            
+            return subjects;
+        }
+        
+        function extractClass(text) {
+            // 提取班级信息，识别到"班"就把"班"和"班"前面的所有内容截取出来
+            const classIndex = text.indexOf('班');
+            if (classIndex > 0) {
+                // 向前查找班级的开始位置
+                let startIndex = classIndex - 1;
+                while (startIndex >= 0) {
+                    const char = text[startIndex];
+                    if (!/[\u4e00-\u9fa5\d]/.test(char)) {
+                        // 遇到非中文字符或数字时，如果是空格，继续往前查找
+                        if (char === ' ') {
+                            startIndex--;
+                            continue;
+                        }
+                        break;
+                    }
+                    startIndex--;
+                }
+                startIndex++;
+                let className = text.substring(startIndex, classIndex + 1);
+                // 转换中文数字为阿拉伯数字
+                const numberMap = {
+                    '一班': '1班',
+                    '二班': '2班',
+                    '三班': '3班',
+                    '四班': '4班',
+                    '五班': '5班',
+                    '六班': '6班',
+                    '七班': '7班',
+                    '八班': '8班',
+                    '九班': '9班',
+                    '十班': '10班'
+                };
+                return numberMap[className] || className;
+            }
+            return '';
+        }
+        
+        function extractSubject(text) {
+            // 提取学科信息
+            const subjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '体育', '音乐', '美术', '信息技术'];
+            for (const subject of subjects) {
+                if (text.includes(subject)) {
+                    return subject;
+                }
+            }
+            return '';
+        }
+        
+        function extractPeriods(text) {
+            // 提取节数信息，识别到"节"就把"节"前面的数字截取出来
+            const periodIndex = text.indexOf('节');
+            if (periodIndex > 0) {
+                // 向前查找节数的开始位置
+                let startIndex = periodIndex - 1;
+                while (startIndex >= 0) {
+                    const char = text[startIndex];
+                    if (!/\d/.test(char)) {
+                        // 遇到非数字时，如果是空格，再往前多截取几位
+                        if (char === ' ') {
+                            startIndex--;
+                            continue;
+                        }
+                        break;
+                    }
+                    startIndex--;
+                }
+                startIndex++;
+                return text.substring(startIndex, periodIndex);
+            }
+            return '';
+        }
+        
+        function parseSubjectString(subjectString) {
+            const match = subjectString.match(/^(.*?)(\d+班)\s+(.*)$/);
+            if (match) {
+                return {
+                    grade: match[1].trim(),
+                    class: match[2].trim(),
+                    subject: match[3].trim()
+                };
+            }
+            return { grade: '', class: '', subject: subjectString };
+        }
+        
+        function normalizeSemester(semester) {
+            if (!semester) return semester;
+            
+            const semesterStr = semester.toString().trim();
+            
+            // 正则表达式匹配各种学期格式
+            const semesterRegex = /(\d{4})[\-\/](\d{4})[\-\/]*([12])/;
+            const match = semesterStr.match(semesterRegex);
+            
+            if (match) {
+                const year1 = match[1];
+                const year2 = match[2];
+                const term = match[3];
+                return `${year1}-${year2}-${term}`;
+            }
+            
+            // 匹配 "2024-2025学年第一学期" 格式
+            const chineseFormatRegex = /(\d{4})[\-\/](\d{4})[\u5b66\u5e74]*(\u7b2c[一二])\u5b66\u671f/;
+            const chineseMatch = semesterStr.match(chineseFormatRegex);
+            
+            if (chineseMatch) {
+                const year1 = chineseMatch[1];
+                const year2 = chineseMatch[2];
+                const term = chineseMatch[3] === '第一' ? '1' : '2';
+                return `${year1}-${year2}-${term}`;
+            }
+            
+            // 匹配 "2024-2025-1" 格式
+            const simpleFormatRegex = /(\d{4})[\-](\d{4})[\-]([12])/;
+            const simpleMatch = semesterStr.match(simpleFormatRegex);
+            
+            if (simpleMatch) {
+                return semesterStr;
+            }
+            
+            // 匹配 "2024-1" 格式
+            const shortFormatRegex = /(\d{4})[\-]([12])/;
+            const shortMatch = semesterStr.match(shortFormatRegex);
+            
+            if (shortMatch) {
+                const year = shortMatch[1];
+                const term = shortMatch[2];
+                const nextYear = parseInt(year) + 1;
+                return `${year}-${nextYear}-${term}`;
+            }
+            
+            return semester;
+        }
+        
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <h2>转换结果</h2>
+                <p class="${type}">${message}</p>
+            `;
+        }
+    </script>
+</body>
+</html>
